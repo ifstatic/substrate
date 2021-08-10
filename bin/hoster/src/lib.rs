@@ -40,8 +40,6 @@ where
 		+ sp_api::Metadata<Block>
 		+ sp_session::SessionKeys<Block>
 		+ sp_authority_discovery::AuthorityDiscoveryApi<Block>,
-	//<<RuntimeApi as ConstructRuntimeApi<Block, sc_service::TFullClient<Block, RuntimeApi, NativeExecutor<Executor>>>>::RuntimeApi as sp_api::ApiExt<Block>>::StateBackend:
-	//    sc_client_db::storage_cache::SyncingCachingState,
 {
 	let telemetry = config
 		.telemetry_endpoints

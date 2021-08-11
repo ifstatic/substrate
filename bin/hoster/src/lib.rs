@@ -1,5 +1,6 @@
 use futures::prelude::*;
 use num_traits::AsPrimitive;
+use sc_cli::SubstrateCli;
 use sc_client_api::call_executor::ExecutorProvider;
 use sc_consensus_babe::SlotProportion;
 use sc_executor::{NativeExecutionDispatch, NativeExecutor};
@@ -14,7 +15,7 @@ use std::{str::FromStr, sync::Arc};
 type StateBackend<Block> =
 	sc_client_db::SyncingCachingState<sc_client_db::RefTrackingState<Block>, Block>;
 
-pub fn new_full<Block, RuntimeApi, Executor>(
+fn new_full<Block, RuntimeApi, Executor>(
 	mut config: sc_service::Configuration,
 ) -> Result<sc_service::TaskManager, ServiceError>
 where
@@ -122,8 +123,6 @@ where
 		telemetry.as_ref().map(|x| x.handle()),
 	)?;
 
-	//let import_setup = (block_import, grandpa_link, babe_link);
-
 	let auth_disc_publish_non_global_ips = config.network.allow_non_globals_in_dht;
 
 	config.network.extra_sets.push(sc_finality_grandpa::grandpa_peers_set_config());
@@ -161,7 +160,7 @@ where
 	let enable_grandpa = !config.disable_grandpa;
 	let prometheus_registry = config.prometheus_registry().cloned();
 
-	let _rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
+	sc_service::spawn_tasks(sc_service::SpawnTasksParams {
 		config,
 		backend: backend.clone(),
 		client: client.clone(),
@@ -309,4 +308,94 @@ where
 	network_starter.start_network();
 
 	Ok(task_manager)
+}
+
+#[derive(structopt::StructOpt)]
+struct Cli<GenesisConfig> {
+	#[structopt(skip)]
+	_phantom: std::marker::PhantomData<GenesisConfig>,
+	#[structopt(flatten)]
+	run: sc_cli::RunCmd,
+}
+
+impl<GenesisConfig: sc_chain_spec::RuntimeGenesis + 'static> SubstrateCli for Cli<GenesisConfig> {
+	fn impl_name() -> String {
+		"Runtime Hoster".into()
+	}
+
+	fn impl_version() -> String {
+		Default::default()
+	}
+
+	fn description() -> String {
+		env!("CARGO_PKG_DESCRIPTION").into()
+	}
+
+	fn author() -> String {
+		env!("CARGO_PKG_AUTHORS").into()
+	}
+
+	fn support_url() -> String {
+		"https://github.com/paritytech/substrate/issues/new".into()
+	}
+
+	fn copyright_start_year() -> i32 {
+		2017
+	}
+
+	fn load_spec(&self, id: &str) -> std::result::Result<Box<dyn sc_service::ChainSpec>, String> {
+		Ok(Box::new(sc_chain_spec::GenericChainSpec::<GenesisConfig>::from_json_file(
+			std::path::PathBuf::from(id),
+		)?))
+	}
+
+	fn native_runtime_version(
+		_: &Box<dyn sc_chain_spec::ChainSpec>,
+	) -> &'static sp_api::RuntimeVersion {
+		&sp_api::RuntimeVersion {
+			spec_name: sp_runtime::RuntimeString::Borrowed(""),
+			impl_name: sp_runtime::RuntimeString::Borrowed(""),
+			authoring_version: 0,
+			spec_version: 0,
+			impl_version: 0,
+			apis: std::borrow::Cow::Borrowed(&[]),
+			transaction_version: 0,
+		}
+	}
+}
+
+pub fn run<Block, RuntimeApi, Executor, GenesisConfig>() -> Result<(), sc_cli::Error>
+where
+	Block: BlockT + std::marker::Unpin,
+	<Block as BlockT>::Hash: FromStr,
+	<<Block as BlockT>::Header as HeaderT>::Number: AsPrimitive<usize>,
+	Executor: NativeExecutionDispatch + 'static,
+	RuntimeApi: ConstructRuntimeApi<
+			Block,
+			sc_service::TFullClient<Block, RuntimeApi, NativeExecutor<Executor>>,
+		> + Send
+		+ Sync
+		+ 'static,
+	<RuntimeApi as ConstructRuntimeApi<
+		Block,
+		sc_service::TFullClient<Block, RuntimeApi, NativeExecutor<Executor>>,
+	>>::RuntimeApi: TaggedTransactionQueue<Block>
+		+ sp_consensus_babe::BabeApi<Block>
+		+ sp_block_builder::BlockBuilder<Block>
+		+ sp_api::ApiExt<Block, StateBackend = StateBackend<Block>>
+		+ sc_finality_grandpa::GrandpaApi<Block>
+		+ sp_offchain::OffchainWorkerApi<Block>
+		+ sp_api::Metadata<Block>
+		+ sp_session::SessionKeys<Block>
+		+ sp_authority_discovery::AuthorityDiscoveryApi<Block>,
+	GenesisConfig: sc_chain_spec::RuntimeGenesis + 'static,
+{
+	let cli = Cli::<GenesisConfig>::from_args();
+
+	let runner = cli.create_runner(&cli.run)?;
+	runner.run_node_until_exit(|config| async move {
+		new_full::<Block, RuntimeApi, Executor>(config)
+	})?;
+
+	Ok(())
 }

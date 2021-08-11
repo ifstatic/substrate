@@ -30,7 +30,7 @@ use self::{
 	sandbox::Sandbox,
 };
 use crate::{
-	exec::StorageKey,
+	exec::{StorageKey, AccountIdOf},
 	rent::Rent,
 	schedule::{API_BENCHMARK_BATCH_SIZE, INSTR_BENCHMARK_BATCH_SIZE},
 	storage::Storage,
@@ -40,7 +40,7 @@ use codec::Encode;
 use frame_benchmarking::{account, benchmarks, impl_benchmark_test_suite, whitelisted_caller};
 use frame_support::weights::Weight;
 use frame_system::{Pallet as System, RawOrigin};
-use pallet_contracts_primitives::RentProjection;
+use pallet_contracts_primitives::{Code, RentProjection};
 use pwasm_utils::parity_wasm::elements::{BlockType, BrTableData, Instruction, ValueType};
 use sp_runtime::traits::{Bounded, Hash, Zero};
 use sp_std::{convert::TryInto, default::Default, vec, vec::Vec};
@@ -276,6 +276,22 @@ fn create_storage<T: Config>(
 /// The funding that each account that either calls or instantiates contracts is funded with.
 fn caller_funding<T: Config>() -> BalanceOf<T> {
 	BalanceOf::<T>::max_value() / 2u32.into()
+}
+
+macro_rules! load_benchmark {
+    ($name:expr) => {{
+		let bytes = {
+			#[cfg(not(test))]
+			{
+				include_bytes!(concat!("../../benchmarks/", $name, ".wasm"))
+			}
+			#[cfg(test)]
+			{
+				include_bytes!(concat!("../../benchmarks/", $name, "_test.wasm"))
+			}
+		};
+		Code::Upload(Bytes(bytes.to_vec()))
+	}};
 }
 
 benchmarks! {
@@ -2536,6 +2552,43 @@ benchmarks! {
 		#[cfg(not(feature = "std"))]
 		return Err("Run this bench with a native runtime in order to see the schedule.");
 	}: {}
+
+	#[extra]
+	macro_erc20_transfer {
+		let code = load_benchmark!("erc20");
+		let caller = whitelisted_caller();
+		T::Currency::make_free_balance_be(&caller, caller_funding::<T>());
+		let constructor: ([u8; 4], BalanceOf<T>) = ([0x9b, 0xae, 0x9d, 0x5e], 1000u32.into());
+		let outcome = <Contracts<T>>::bare_instantiate(
+			caller.clone(),
+			Endow::max::<T>(),
+			Weight::MAX,
+			code,
+			constructor.encode(),
+			Vec::new(),
+			false,
+			false,
+		);
+		let contract_address = outcome.result.map(|o| o.account_id)?;
+		let transfer = {
+			let transfer: ([u8; 4], AccountIdOf<T>, BalanceOf<T>) = (
+				[0x84, 0xa1, 0x5d, 0xa1],
+				account::<T::AccountId>("receiver", 0, 0),
+				1u32.into(),
+			);
+			transfer.encode()
+		};
+	}: {
+		<Contracts<T>>::bare_call(
+			caller,
+			contract_address,
+			0u32.into(),
+			Weight::MAX,
+			transfer,
+			false,
+		)
+		.result?;
+	}
 }
 
 impl_benchmark_test_suite!(

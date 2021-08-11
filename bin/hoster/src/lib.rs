@@ -311,14 +311,19 @@ where
 }
 
 #[derive(structopt::StructOpt)]
-struct Cli<GenesisConfig> {
+struct Cli<GenesisConfig, Extension = sc_chain_spec::NoExtension> {
 	#[structopt(skip)]
-	_phantom: std::marker::PhantomData<GenesisConfig>,
+	_phantom: std::marker::PhantomData<(GenesisConfig, Extension)>,
 	#[structopt(flatten)]
 	run: sc_cli::RunCmd,
 }
 
-impl<GenesisConfig: sc_chain_spec::RuntimeGenesis + 'static> SubstrateCli for Cli<GenesisConfig> {
+impl<GenesisConfig, Extension> SubstrateCli for Cli<GenesisConfig, Extension>
+where
+	GenesisConfig: sc_chain_spec::RuntimeGenesis + 'static,
+	Extension:
+		sp_runtime::DeserializeOwned + Send + Sync + sc_service::ChainSpecExtension + 'static,
+{
 	fn impl_name() -> String {
 		"Runtime Hoster".into()
 	}
@@ -344,7 +349,7 @@ impl<GenesisConfig: sc_chain_spec::RuntimeGenesis + 'static> SubstrateCli for Cl
 	}
 
 	fn load_spec(&self, id: &str) -> std::result::Result<Box<dyn sc_service::ChainSpec>, String> {
-		Ok(Box::new(sc_chain_spec::GenericChainSpec::<GenesisConfig>::from_json_file(
+		Ok(Box::new(sc_chain_spec::GenericChainSpec::<GenesisConfig, Extension>::from_json_file(
 			std::path::PathBuf::from(id),
 		)?))
 	}
@@ -364,7 +369,7 @@ impl<GenesisConfig: sc_chain_spec::RuntimeGenesis + 'static> SubstrateCli for Cl
 	}
 }
 
-pub fn run<Block, RuntimeApi, Executor, GenesisConfig>() -> Result<(), sc_cli::Error>
+pub fn run<Block, RuntimeApi, Executor, GenesisConfig, Extension>() -> Result<(), sc_cli::Error>
 where
 	Block: BlockT + std::marker::Unpin,
 	<Block as BlockT>::Hash: FromStr,
@@ -389,8 +394,10 @@ where
 		+ sp_session::SessionKeys<Block>
 		+ sp_authority_discovery::AuthorityDiscoveryApi<Block>,
 	GenesisConfig: sc_chain_spec::RuntimeGenesis + 'static,
+	Extension:
+		sp_runtime::DeserializeOwned + Send + Sync + sc_service::ChainSpecExtension + 'static,
 {
-	let cli = Cli::<GenesisConfig>::from_args();
+	let cli = Cli::<GenesisConfig, Extension>::from_args();
 
 	let runner = cli.create_runner(&cli.run)?;
 	runner.run_node_until_exit(|config| async move {

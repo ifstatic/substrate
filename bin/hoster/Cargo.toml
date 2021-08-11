@@ -40,3 +40,8 @@ sp-authority-discovery = { version = "4.0.0-dev",  path = "../../primitives/auth
 sc-cli = { version = "0.10.0-dev", path = "../../client/cli" }
 sc-chain-spec = { version = "4.0.0-dev", path = "../../client/chain-spec" }
 structopt = "0.3.22"
+
+[dev-dependencies]
+node-runtime = { version = "3.0.0-dev", path = "../node/runtime" }
+node-executor = { version = "3.0.0-dev", path = "../node/executor" }
+node-cli = { version = "3.0.0-dev", path = "../node/cli" }

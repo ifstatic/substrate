@@ -2506,6 +2506,9 @@ name = "hoster"
 version = "3.0.0-dev"
 dependencies = [
  "futures 0.3.15",
+ "node-cli",
+ "node-executor",
+ "node-runtime",
  "num-traits",
  "sc-authority-discovery",
  "sc-basic-authorship",

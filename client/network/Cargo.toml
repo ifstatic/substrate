@@ -64,7 +64,7 @@ unsigned-varint = { version = "0.6.0", features = [
 ] }
 void = "1.0.2"
 wasm-timer = "0.2"
-zeroize = "1.2.0"
+zeroize = "1.5.1"
 
 [dependencies.libp2p]
 version = "0.37.1"
